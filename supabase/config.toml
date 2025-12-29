@@ -1,1 +1,4 @@
 project_id = "ddocrldftvwzjdnitmzz"
+
+[functions.send-ticket-confirmation]
+verify_jwt = false
