@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 
@@ -143,6 +144,33 @@ const Checkout = () => {
     const success = Math.random() > 0.1;
 
     if (success) {
+      // Generate a mock M-PESA receipt number
+      const mpesaReceipt = `SIM${Date.now().toString(36).toUpperCase()}`;
+      
+      // Save order to database
+      const { error: orderError } = await supabase.from("orders").insert({
+        event_id: String(event.id),
+        ticket_count: ticketCount,
+        total_amount: totalAmount,
+        customer_name: formData.fullName,
+        customer_email: formData.email,
+        customer_phone: formData.phone,
+        payment_status: "completed",
+        mpesa_receipt: mpesaReceipt,
+      });
+
+      if (orderError) {
+        console.error("Failed to save order:", orderError);
+        setPaymentStatus("failed");
+        toast({
+          title: "Order Failed",
+          description: "Payment was successful but we couldn't save your order. Please contact support.",
+          variant: "destructive",
+        });
+        setIsProcessing(false);
+        return;
+      }
+
       setPaymentStatus("success");
       toast({
         title: "Payment Successful!",
