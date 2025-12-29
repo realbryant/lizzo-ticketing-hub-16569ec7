@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
-import { Zap, Moon, Sun, Menu, X } from "lucide-react";
+import { Zap, Moon, Sun, Menu, X, LogIn, LogOut, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -10,6 +11,8 @@ const Navbar = () => {
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
 
   useEffect(() => {
     setMounted(true);
@@ -22,6 +25,11 @@ const Navbar = () => {
 
   const toggleTheme = () => {
     setTheme(theme === "dark" ? "light" : "dark");
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
   };
 
   const navLinks = [
@@ -62,7 +70,7 @@ const Navbar = () => {
           </Link>
 
           {/* Desktop Menu */}
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden md:flex items-center gap-6">
             {navLinks.map((link) => (
               <Link
                 key={link.name}
@@ -73,6 +81,32 @@ const Navbar = () => {
                 {link.name}
               </Link>
             ))}
+            
+            {/* Auth Button */}
+            {user ? (
+              <div className="flex items-center gap-3">
+                <span className="text-sm text-muted-foreground flex items-center gap-1">
+                  <User className="w-4 h-4" />
+                  {user.email?.split("@")[0]}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSignOut}
+                  className="gap-2"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Logout
+                </Button>
+              </div>
+            ) : (
+              <Link to="/auth">
+                <Button variant="default" size="sm" className="gap-2">
+                  <LogIn className="w-4 h-4" />
+                  Login
+                </Button>
+              </Link>
+            )}
             
             {/* Theme Toggle */}
             <Button
@@ -138,6 +172,26 @@ const Navbar = () => {
                 {link.name}
               </Link>
             ))}
+            
+            {/* Mobile Auth */}
+            {user ? (
+              <button
+                onClick={handleSignOut}
+                className="text-foreground/80 hover:text-primary font-medium transition-colors duration-200 py-2 text-left flex items-center gap-2"
+              >
+                <LogOut className="w-4 h-4" />
+                Logout
+              </button>
+            ) : (
+              <Link
+                to="/auth"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="text-foreground/80 hover:text-primary font-medium transition-colors duration-200 py-2 flex items-center gap-2"
+              >
+                <LogIn className="w-4 h-4" />
+                Login / Sign Up
+              </Link>
+            )}
           </div>
         </div>
       </div>
