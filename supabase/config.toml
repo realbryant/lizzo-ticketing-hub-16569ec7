@@ -2,3 +2,6 @@ project_id = "ddocrldftvwzjdnitmzz"
 
 [functions.send-ticket-confirmation]
 verify_jwt = false
+
+[functions.mpesa-stk-push]
+verify_jwt = false

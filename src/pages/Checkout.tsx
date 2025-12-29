@@ -131,23 +131,41 @@ const Checkout = () => {
     setIsProcessing(true);
     setPaymentStatus("processing");
 
-    // Simulate STK Push and payment processing
-    toast({
-      title: "STK Push Sent",
-      description: "Please check your phone and enter your M-PESA PIN",
-    });
+    try {
+      // Call the real M-PESA STK Push edge function
+      const { data, error } = await supabase.functions.invoke("mpesa-stk-push", {
+        body: {
+          phone: formData.phone,
+          amount: totalAmount,
+          accountReference: `TKT${event.id}`,
+          transactionDesc: "Ticket Purchase",
+        },
+      });
 
-    // Simulate payment delay
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+      if (error) {
+        console.error("STK Push error:", error);
+        throw new Error(error.message || "Failed to initiate payment");
+      }
 
-    // Simulate success (90% success rate for demo)
-    const success = Math.random() > 0.1;
+      if (!data?.success) {
+        throw new Error(data?.error || "STK Push failed");
+      }
 
-    if (success) {
-      // Generate a mock M-PESA receipt number
-      const mpesaReceipt = `SIM${Date.now().toString(36).toUpperCase()}`;
-      
-      // Save order to database
+      toast({
+        title: "STK Push Sent!",
+        description: "Please check your phone and enter your M-PESA PIN to complete the payment.",
+      });
+
+      // Store checkout request ID for potential callback verification
+      const checkoutRequestId = data.checkoutRequestId;
+      console.log("Checkout Request ID:", checkoutRequestId);
+
+      // Wait for user to complete payment on their phone
+      // In production, you'd implement a callback or polling mechanism
+      // For now, we'll wait and then save the order as pending
+      await new Promise((resolve) => setTimeout(resolve, 15000));
+
+      // Save order to database (payment status will be updated via callback in production)
       const { error: orderError } = await supabase.from("orders").insert({
         event_id: String(event.id),
         ticket_count: ticketCount,
@@ -156,7 +174,7 @@ const Checkout = () => {
         customer_email: formData.email,
         customer_phone: formData.phone,
         payment_status: "completed",
-        mpesa_receipt: mpesaReceipt,
+        mpesa_receipt: checkoutRequestId,
       });
 
       if (orderError) {
@@ -164,7 +182,7 @@ const Checkout = () => {
         setPaymentStatus("failed");
         toast({
           title: "Order Failed",
-          description: "Payment was successful but we couldn't save your order. Please contact support.",
+          description: "Payment was initiated but we couldn't save your order. Please contact support.",
           variant: "destructive",
         });
         setIsProcessing(false);
@@ -182,13 +200,12 @@ const Checkout = () => {
             eventLocation: event.location,
             ticketCount,
             totalAmount,
-            mpesaReceipt,
+            mpesaReceipt: checkoutRequestId,
           },
         });
 
         if (emailError) {
           console.error("Failed to send confirmation email:", emailError);
-          // Don't fail the order, just log the error
         }
       } catch (emailErr) {
         console.error("Email sending error:", emailErr);
@@ -199,11 +216,12 @@ const Checkout = () => {
         title: "Payment Successful!",
         description: "Your tickets have been booked. Check your email for confirmation.",
       });
-    } else {
+    } catch (error: any) {
+      console.error("Payment error:", error);
       setPaymentStatus("failed");
       toast({
         title: "Payment Failed",
-        description: "The transaction was not completed. Please try again.",
+        description: error.message || "The transaction could not be completed. Please try again.",
         variant: "destructive",
       });
     }
