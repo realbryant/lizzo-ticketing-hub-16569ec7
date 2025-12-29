@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "next-themes";
-import { Zap, Moon, Sun, Menu, X, LogIn, LogOut, User } from "lucide-react";
+import { Zap, Moon, Sun, Menu, X, LogIn, LogOut, User, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -85,6 +85,13 @@ const Navbar = () => {
             {/* Auth Button */}
             {user ? (
               <div className="flex items-center gap-3">
+                <Link
+                  to="/orders"
+                  className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                >
+                  <Receipt className="w-4 h-4" />
+                  My Orders
+                </Link>
                 <span className="text-sm text-muted-foreground flex items-center gap-1">
                   <User className="w-4 h-4" />
                   {user.email?.split("@")[0]}
@@ -158,7 +165,7 @@ const Navbar = () => {
         {/* Mobile Menu */}
         <div
           className={`md:hidden overflow-hidden transition-all duration-300 ${
-            isMobileMenuOpen ? "max-h-48 pb-4" : "max-h-0"
+            isMobileMenuOpen ? "max-h-64 pb-4" : "max-h-0"
           }`}
         >
           <div className="flex flex-col gap-4 bg-card/95 backdrop-blur-md rounded-lg p-4 mt-2">
@@ -175,13 +182,23 @@ const Navbar = () => {
             
             {/* Mobile Auth */}
             {user ? (
-              <button
-                onClick={handleSignOut}
-                className="text-foreground/80 hover:text-primary font-medium transition-colors duration-200 py-2 text-left flex items-center gap-2"
-              >
-                <LogOut className="w-4 h-4" />
-                Logout
-              </button>
+              <>
+                <Link
+                  to="/orders"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="text-foreground/80 hover:text-primary font-medium transition-colors duration-200 py-2 flex items-center gap-2"
+                >
+                  <Receipt className="w-4 h-4" />
+                  My Orders
+                </Link>
+                <button
+                  onClick={handleSignOut}
+                  className="text-foreground/80 hover:text-primary font-medium transition-colors duration-200 py-2 text-left flex items-center gap-2"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Logout
+                </button>
+              </>
             ) : (
               <Link
                 to="/auth"
