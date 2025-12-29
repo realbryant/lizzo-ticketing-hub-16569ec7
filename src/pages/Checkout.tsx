@@ -1,6 +1,9 @@
 import { useState, useEffect } from "react";
-import { useLocation, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft, Phone, Mail, User, CreditCard, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { 
+  ArrowLeft, Phone, Mail, User, CreditCard, 
+  CheckCircle, XCircle, Loader2 
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,26 +62,19 @@ const Checkout = () => {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-pulse text-primary">Loading...</div>
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
 
-  if (!user) {
-    return null; // Will redirect via useEffect
-  }
-
-  if (!state) {
+  if (!user || !state) {
     return (
       <div className="min-h-screen flex flex-col">
         <Navbar />
         <main className="flex-1 flex items-center justify-center pt-20">
           <div className="text-center space-y-4">
-            <h2 className="text-2xl font-bold text-foreground">No event selected</h2>
-            <p className="text-muted-foreground">Please select an event first</p>
-            <Button variant="accent" onClick={() => navigate("/")}>
-              Browse Events
-            </Button>
+            <h2 className="text-2xl font-bold">No event selected</h2>
+            <Button onClick={() => navigate("/")}>Browse Events</Button>
           </div>
         </main>
         <Footer />
@@ -106,23 +102,18 @@ const Checkout = () => {
       return;
     }
 
-    // Validate phone number (Kenya format)
-    const phoneRegex = /^(?:254|\+254|0)?([17]\d{8})$/;
-    if (!phoneRegex.test(formData.phone)) {
-      toast({
-        title: "Invalid Phone Number",
-        description: "Please enter a valid Kenyan phone number",
-        variant: "destructive",
-      });
-      return;
+    // 1. Format Phone Number for Safaricom (Must be 254...)
+    let formattedPhone = formData.phone.replace(/\D/g, ""); 
+    if (formattedPhone.startsWith("0")) {
+      formattedPhone = "254" + formattedPhone.substring(1);
+    } else if (!formattedPhone.startsWith("254")) {
+      formattedPhone = "254" + formattedPhone;
     }
 
-    // Validate email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email)) {
+    if (formattedPhone.length !== 12) {
       toast({
-        title: "Invalid Email",
-        description: "Please enter a valid email address",
+        title: "Invalid Phone",
+        description: "Please enter a valid Kenyan number (e.g., 0712345678)",
         variant: "destructive",
       });
       return;
@@ -132,268 +123,121 @@ const Checkout = () => {
     setPaymentStatus("processing");
 
     try {
-      // Call the real M-PESA STK Push edge function
+      // 2. Call the Supabase Edge Function
       const { data, error } = await supabase.functions.invoke("mpesa-stk-push", {
         body: {
-          phone: formData.phone,
+          phone: formattedPhone,
           amount: totalAmount,
-          accountReference: `TKT${event.id}`,
-          transactionDesc: "Ticket Purchase",
+          accountReference: `EVENT-${event.id}`,
+          transactionDesc: `Tickets for ${event.name}`,
         },
       });
 
-      if (error) {
-        console.error("STK Push error:", error);
-        throw new Error(error.message || "Failed to initiate payment");
-      }
+      if (error) throw error;
 
-      if (!data?.success) {
-        throw new Error(data?.error || "STK Push failed");
-      }
-
-      toast({
-        title: "STK Push Sent!",
-        description: "Please check your phone and enter your M-PESA PIN to complete the payment.",
-      });
-
-      // Store checkout request ID for potential callback verification
-      const checkoutRequestId = data.checkoutRequestId;
-      console.log("Checkout Request ID:", checkoutRequestId);
-
-      // Wait for user to complete payment on their phone
-      // In production, you'd implement a callback or polling mechanism
-      // For now, we'll wait and then save the order as pending
-      await new Promise((resolve) => setTimeout(resolve, 15000));
-
-      // Save order to database (payment status will be updated via callback in production)
-      const { error: orderError } = await supabase.from("orders").insert({
-        event_id: String(event.id),
-        ticket_count: ticketCount,
-        total_amount: totalAmount,
-        customer_name: formData.fullName,
-        customer_email: formData.email,
-        customer_phone: formData.phone,
-        payment_status: "completed",
-        mpesa_receipt: checkoutRequestId,
-      });
-
-      if (orderError) {
-        console.error("Failed to save order:", orderError);
-        setPaymentStatus("failed");
+      // 3. Check for Successful STK Push initiation
+      if (data?.ResponseCode === "0") {
         toast({
-          title: "Order Failed",
-          description: "Payment was initiated but we couldn't save your order. Please contact support.",
-          variant: "destructive",
-        });
-        setIsProcessing(false);
-        return;
-      }
-
-      // Send confirmation email
-      try {
-        const { error: emailError } = await supabase.functions.invoke("send-ticket-confirmation", {
-          body: {
-            customerName: formData.fullName,
-            customerEmail: formData.email,
-            eventName: event.name,
-            eventDate: event.date,
-            eventLocation: event.location,
-            ticketCount,
-            totalAmount,
-            mpesaReceipt: checkoutRequestId,
-          },
+          title: "STK Push Sent!",
+          description: "Enter your M-PESA PIN on your phone to complete payment.",
         });
 
-        if (emailError) {
-          console.error("Failed to send confirmation email:", emailError);
-        }
-      } catch (emailErr) {
-        console.error("Email sending error:", emailErr);
-      }
+        // Simulating waiting for payment confirmation
+        await new Promise((resolve) => setTimeout(resolve, 10000));
 
-      setPaymentStatus("success");
-      toast({
-        title: "Payment Successful!",
-        description: "Your tickets have been booked. Check your email for confirmation.",
-      });
+        // 4. Record the Order in Database
+        const { error: orderError } = await supabase.from("orders").insert({
+          event_id: String(event.id),
+          ticket_count: ticketCount,
+          total_amount: totalAmount,
+          customer_name: formData.fullName,
+          customer_email: formData.email,
+          customer_phone: formattedPhone,
+          payment_status: "completed",
+          mpesa_receipt: data.CheckoutRequestID,
+        });
+
+        if (orderError) throw orderError;
+
+        setPaymentStatus("success");
+      } else {
+        throw new Error(data?.CustomerMessage || "Failed to trigger M-PESA prompt.");
+      }
     } catch (error: any) {
-      console.error("Payment error:", error);
+      console.error("Payment Error:", error);
       setPaymentStatus("failed");
       toast({
         title: "Payment Failed",
-        description: error.message || "The transaction could not be completed. Please try again.",
+        description: error.message || "An unexpected error occurred.",
         variant: "destructive",
       });
+    } finally {
+      setIsProcessing(false);
     }
-
-    setIsProcessing(false);
   };
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <Navbar />
-      
-      <main className="flex-1 pt-24 pb-12">
-        <div className="container mx-auto px-4 max-w-2xl">
-          {/* Back Button */}
-          <Button
-            variant="ghost"
-            onClick={() => navigate("/")}
-            className="mb-6 gap-2 text-muted-foreground hover:text-foreground"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to Events
-          </Button>
+      <main className="flex-1 pt-24 pb-12 container mx-auto px-4 max-w-2xl">
+        <Button variant="ghost" onClick={() => navigate("/")} className="mb-6 gap-2">
+          <ArrowLeft className="w-4 h-4" /> Back to Events
+        </Button>
 
-          <div className="space-y-6 animate-fade-in">
-            {/* Event Summary */}
-            <Card className="overflow-hidden">
-              <div className="flex flex-col sm:flex-row">
-                <img
-                  src={event.image}
-                  alt={event.name}
-                  className="w-full sm:w-48 h-48 object-cover"
-                />
-                <CardContent className="p-6 flex-1">
-                  <h2 className="text-2xl font-bold text-card-foreground mb-2">{event.name}</h2>
-                  <p className="text-muted-foreground mb-1">{event.date}</p>
-                  <p className="text-muted-foreground mb-4">{event.location}</p>
-                  <div className="flex items-center justify-between pt-4 border-t border-border">
-                    <span className="text-muted-foreground">
-                      {ticketCount} ticket{ticketCount > 1 ? "s" : ""} × KES {event.price.toLocaleString()}
-                    </span>
-                    <span className="text-xl font-bold text-primary">
-                      KES {totalAmount.toLocaleString()}
-                    </span>
-                  </div>
-                </CardContent>
-              </div>
+        <div className="space-y-6">
+          <Card className="overflow-hidden">
+            <div className="flex flex-col sm:flex-row">
+              <img src={event.image} alt={event.name} className="w-full sm:w-48 h-48 object-cover" />
+              <CardContent className="p-6 flex-1">
+                <h2 className="text-2xl font-bold">{event.name}</h2>
+                <p className="text-muted-foreground">{event.date} | {event.location}</p>
+                <div className="flex justify-between pt-4 mt-4 border-t font-bold text-lg">
+                  <span>Total ({ticketCount} Tickets)</span>
+                  <span className="text-primary">KES {totalAmount.toLocaleString()}</span>
+                </div>
+              </CardContent>
+            </div>
+          </Card>
+
+          {paymentStatus === "success" ? (
+            <Card className="border-green-500 bg-green-500/5 text-center p-8">
+              <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
+              <h3 className="text-xl font-bold mb-2">Tickets Booked!</h3>
+              <p className="mb-4">Check your email for your digital tickets.</p>
+              <Button onClick={() => navigate("/")}>Return Home</Button>
             </Card>
-
-            {/* Payment Status */}
-            {paymentStatus === "success" && (
-              <Card className="border-green-500 bg-green-500/10">
-                <CardContent className="p-6 text-center space-y-4">
-                  <CheckCircle className="w-16 h-16 text-green-500 mx-auto" />
-                  <h3 className="text-xl font-bold text-green-600 dark:text-green-400">
-                    Payment Successful!
-                  </h3>
-                  <p className="text-muted-foreground">
-                    Your tickets for {event.name} have been booked. A confirmation email has been sent to {formData.email}.
-                  </p>
-                  <Button variant="accent" onClick={() => navigate("/")}>
-                    Back to Main Page
+          ) : paymentStatus === "failed" ? (
+            <Card className="border-destructive bg-destructive/5 text-center p-8">
+              <XCircle className="w-16 h-16 text-destructive mx-auto mb-4" />
+              <h3 className="text-xl font-bold mb-2">Payment Failed</h3>
+              <Button onClick={() => setPaymentStatus("idle")}>Try Again</Button>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader><CardTitle className="flex gap-2 items-center"><CreditCard /> Checkout</CardTitle></CardHeader>
+              <CardContent>
+                <form onSubmit={handleMpesaPayment} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="fullName">Full Name</Label>
+                    <Input id="fullName" name="fullName" required value={formData.fullName} onChange={handleInputChange} disabled={isProcessing} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">M-PESA Phone Number</Label>
+                    <Input id="phone" name="phone" placeholder="0712345678" required value={formData.phone} onChange={handleInputChange} disabled={isProcessing} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input id="email" name="email" type="email" required value={formData.email} onChange={handleInputChange} disabled={isProcessing} />
+                  </div>
+                  <Button type="submit" className="w-full h-12 text-lg" disabled={isProcessing}>
+                    {isProcessing ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Processing...</> : `Pay KES ${totalAmount.toLocaleString()}`}
                   </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {paymentStatus === "failed" && (
-              <Card className="border-destructive bg-destructive/10">
-                <CardContent className="p-6 text-center space-y-4">
-                  <XCircle className="w-16 h-16 text-destructive mx-auto" />
-                  <h3 className="text-xl font-bold text-destructive">Payment Failed</h3>
-                  <p className="text-muted-foreground">
-                    The transaction could not be completed. Please try again.
-                  </p>
-                  <Button variant="accent" onClick={() => setPaymentStatus("idle")}>
-                    Try Again
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Checkout Form */}
-            {(paymentStatus === "idle" || paymentStatus === "processing") && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <CreditCard className="w-5 h-5 text-primary" />
-                    Payment Details
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <form onSubmit={handleMpesaPayment} className="space-y-6">
-                    {/* Full Name */}
-                    <div className="space-y-2">
-                      <Label htmlFor="fullName" className="flex items-center gap-2">
-                        <User className="w-4 h-4" />
-                        Full Name
-                      </Label>
-                      <Input
-                        id="fullName"
-                        name="fullName"
-                        placeholder="John Doe"
-                        value={formData.fullName}
-                        onChange={handleInputChange}
-                        disabled={isProcessing}
-                        className="bg-secondary"
-                      />
-                    </div>
-
-                    {/* Phone Number */}
-                    <div className="space-y-2">
-                      <Label htmlFor="phone" className="flex items-center gap-2">
-                        <Phone className="w-4 h-4" />
-                        Phone Number (M-PESA)
-                      </Label>
-                      <Input
-                        id="phone"
-                        name="phone"
-                        placeholder="0712345678"
-                        value={formData.phone}
-                        onChange={handleInputChange}
-                        disabled={isProcessing}
-                        className="bg-secondary"
-                      />
-                    </div>
-
-                    {/* Email */}
-                    <div className="space-y-2">
-                      <Label htmlFor="email" className="flex items-center gap-2">
-                        <Mail className="w-4 h-4" />
-                        Email Address
-                      </Label>
-                      <Input
-                        id="email"
-                        name="email"
-                        type="email"
-                        placeholder="john@example.com"
-                        value={formData.email}
-                        onChange={handleInputChange}
-                        disabled={isProcessing}
-                        className="bg-secondary"
-                      />
-                    </div>
-
-                    {/* M-PESA Payment Button */}
-                    <Button
-                      type="submit"
-                      variant="hero"
-                      className="w-full"
-                      disabled={isProcessing}
-                    >
-                      {isProcessing ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          Processing Payment...
-                        </>
-                      ) : (
-                        <>Pay KES {totalAmount.toLocaleString()} with M-PESA</>
-                      )}
-                    </Button>
-
-                    <p className="text-xs text-center text-muted-foreground">
-                      You will receive an STK push on your phone. Enter your M-PESA PIN to complete the payment.
-                    </p>
-                  </form>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+                </form>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </main>
-
       <Footer />
     </div>
   );
