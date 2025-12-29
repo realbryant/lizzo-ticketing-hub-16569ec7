@@ -171,6 +171,29 @@ const Checkout = () => {
         return;
       }
 
+      // Send confirmation email
+      try {
+        const { error: emailError } = await supabase.functions.invoke("send-ticket-confirmation", {
+          body: {
+            customerName: formData.fullName,
+            customerEmail: formData.email,
+            eventName: event.name,
+            eventDate: event.date,
+            eventLocation: event.location,
+            ticketCount,
+            totalAmount,
+            mpesaReceipt,
+          },
+        });
+
+        if (emailError) {
+          console.error("Failed to send confirmation email:", emailError);
+          // Don't fail the order, just log the error
+        }
+      } catch (emailErr) {
+        console.error("Email sending error:", emailErr);
+      }
+
       setPaymentStatus("success");
       toast({
         title: "Payment Successful!",
